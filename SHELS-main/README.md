@@ -32,7 +32,7 @@
      ### baseline
       python main.py --dataset1 mnist --ID_tasks 5 --total_tasks 10 --batch_size 1 --lr 0.0001 --epochs 10 --cosine_sim True --baseline True --load_checkpoint True --random_seed 5 --save_path ./dir_bl --baseline_ood True
 
-  To run experiments with different datasets, choose dataset1 argument from [mnist, fmnist, cifar10, svhn, gtsrb].
+  To run experiments with different datasets, choose dataset1 argument from [mnist, fmnist, cifar10, svhn, gtsrb, audiomnist].
   
   Note : Be sure to specify the --total_tasks as well as --ID_tasks arguments, total number of classes and total number of ID classes respectively
 
@@ -51,7 +51,7 @@
     ### baseline
      python main.py --dataset1 mnist --dataset2 fmnist --multiple_dataset True --ID_tasks 10 --total_tasks 10 --batch_size 1 --lr 0.0001 --epochs 10 --cosine_sim True --baseline True --load_checkpoint True --save_path ./dir_bl --baseline_ood True
 
- To run experiments with different datasets, choose dataset1 and dataset2 from [mnist, fmnist, cifar10, svhn, gtsrb]
+ To run experiments with different datasets, choose dataset1 and dataset2 from [mnist, fmnist, cifar10, svhn, gtsrb, audiomnist]
     
   Note : Be sure to specify the --total_tasks as well as --ID_tasks arguments and ensure cosistent input dimension in data_loader.py for ID and OOD datasets
 
@@ -69,7 +69,7 @@
     python main.py --dataset1 mnist --ID_tasks 7 --total_tasks 10 --batch_size 1 --lr 0.0001 --epochs 10 --cosine_sim True --sparsity_gs True --load_checkpoint True --random_seed 5 --save_path ./dir 
 
 
-  To run experiments with different datasets, choose dataset1 from [mnist, fmnist, cifar10, svhn, gtsrb]
+  To run experiments with different datasets, choose dataset1 from [mnist, fmnist, cifar10, svhn, gtsrb, audiomnist]
   To load a preloaded set of experiments, use class_list_GTSRB.npz for GTSRB dataset and class_list1.npz for the other datasets by setting--load_list flag to True.
   
 ## Citing this work
