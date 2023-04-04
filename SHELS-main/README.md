@@ -11,6 +11,7 @@
 
   - Pytorch datasets for MNIST, FMNIST, SVHN and CIFAR10
   - GTSRB can be downloaded here https://sid.erda.dk/public/archives/daaeac0d7ce1152aea9b61d9f1e19370/published-archive.html
+  - AudioMNIST can be retrieved from here https://github.com/soerenab/AudioMNIST/tree/master/data
 
     Make sure to set the data_path variable in main.py to the data folder path
 
