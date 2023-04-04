@@ -1,0 +1,28 @@
+#ignore all log file
+*.log*
+#ignore all saved models
+models/
+
+#ignore model results
+model_results/
+
+#ignore all results
+results/
+SHELS-mainresults/
+
+
+#ignore datasets 
+datasets/
+data/
+
+#ignore pycache
+__pycache__/
+
+
+processed_audio_dataset
+
+AudioMNIST/
+
+
+processed_audio_targets
+
