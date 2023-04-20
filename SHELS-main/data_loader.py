@@ -1,14 +1,16 @@
+
 from email.generator import Generator
 from logging import PercentStyle
 from random import random
 import numpy as np
+from copy import copy
 
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torch.utils.data as data
 import torch
 import pdb
-from custom_dataloader import CustomDataset, AudioDataset
+from custom_dataloader import CustomDataset, GeneralDataset
 from preprocess_audio_mnist import preprocess_data
 from arguments import get_args, print_args
 
@@ -58,6 +60,19 @@ def data_loader_CIFAR_10(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
     val_data_len = len(trainset) - train_data_len
      
     train_set, val_set = data.random_split(trainset,[train_data_len, val_data_len])
+    if args.leave_one_out == True:
+        np.random.seed(args.random_seed)
+        np.random.shuffle(classes) # shuffles classes to choose which are iid and ood
+        classes_idx_ID = classes[0:args.ID_tasks]
+        trainset_one_out, testset_one_out = [], []
+        # generate the id classes, then trainset and testset need to be a list of data loaders for each id class
+        for id_class in classes_idx_ID:
+            trainset_copy = train_set.clone()
+            testset_copy = testset.clone()
+            class_trainset, class_testset = create_OOD_dataset(id_class, trainset_copy, testset_copy)# although this says ood, the functionality that we desire is achieved by
+            # this function. We simply want to get the training and testing points belonging to this specific id class which is achieved by this function
+            trainset_one_out.append(class_trainset)
+            testset_one_out.append(class_testset)
     # combine_set = []
     # combine_set.append(val_set)
     # combine_set.append(ood_trainset)
@@ -75,6 +90,8 @@ def data_loader_CIFAR_10(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
     print("Test set length", len(testset))
     print("OOD set length", ood_testset_len)
     #return trainloader, valloader, testloader, ood_trainloader, oodloader, classes
+    if args.leave_one_out:
+        return trainloader, valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset, trainset_one_out, testset_one_out
     return trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset
 
 
@@ -214,6 +231,7 @@ def data_loader_FashionMNIST(root_dir = './data', BATCH_SIZE = 1, ood_class = [7
     return trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset
 
 def data_loader_MNIST(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
+
     args = get_args()
     transform = transforms.Compose([transforms.ToTensor()])
                                     # normalization values = (0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)
@@ -228,8 +246,12 @@ def data_loader_MNIST(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
     if len(ood_class) > 0:
         trainset, testset = create_traintestset(ood_class, trainset,testset)
         if args.debugging:
-            trainset = data.Subset(trainset, np.arange(0, 500))
-            testset = data.Subset(testset, np.arange(0, 200))
+            #trainset = data.Subset(trainset, np.arange(0, 500))
+            #testset = data.Subset(testset, np.arange(0, 200)
+            trainset.data = np.array(trainset.data)[np.arange(0, 500, 1, dtype = int)]
+            trainset.targets = np.array(trainset.targets)[np.arange(0, 500, 1, dtype = int)]
+            testset.data = np.array(testset.data)[np.arange(0, 200, 1, dtype = int)]
+            testset.targets = np.array(testset.targets)[np.arange(0, 200, 1, dtype = int)]
         for i in range(0, len(ood_class)):
             #trainset_ood = datasets.MNIST(root = '../data', train = True, download = True, transform = transform)
             #testset_ood  = datasets.MNIST(root = '../data', train = False, download = True, transform = transform)
@@ -237,20 +259,73 @@ def data_loader_MNIST(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
             testset_ood = torch.load('/home/gridsan/aejilemele/LIS/SHELS-main/datasets/mnist/testset.pt')
             ood_trainset, ood_testset = create_OOD_dataset(ood_class[i], trainset_ood,testset_ood)
             if args.debugging:
-                ood_trainset = data.Subset(ood_trainset, np.arange(0, 100))
-                ood_testset = data.Subset(ood_testset, np.arange(0, 100))
+                #ood_trainset = data.Subset(ood_trainset, np.arange(0, 100))
+                #ood_testset = data.Subset(ood_testset, np.arange(0, 100))
+                 ood_trainset.data = np.array(ood_trainset.data)[np.arange(0, 100, 1, dtype = int)]
+                 ood_trainset.targets = np.array(ood_trainset.targets)[np.arange(0, 100, 1, dtype = int)]
+                 ood_testset.data = np.array(ood_testset.data)[np.arange(0, 200, 1, dtype = int)]
+                 ood_testset.targets = np.array(ood_testset.targets)[np.arange(0, 200, 1, dtype = int)]
             ood_trainset_list.append(ood_trainset)
             ood_testset_list.append(ood_testset)
             ood_testset_len+=len(ood_testset)
-
+    #print(trainset.targets, 'trainset targets')
     train_data_len = int(0.88*len(trainset))
     val_data_len = len(trainset) - train_data_len
     train_set, val_set = data.random_split(trainset,[train_data_len, val_data_len])
+    
+    if args.leave_one_out:
+        train_indices = train_set.indices
+        val_indices = val_set.indices
+        print(type(train_set.dataset.data))
+        #print('testing data shape', train_set.dataset.data[train_indices].shape)
+        #print('original data shape', train_set.dataset.data.shape)
+        train_set_dataset = GeneralDataset(np.array(train_set.dataset.data)[train_indices].tolist(), np.array(train_set.dataset.targets)[train_indices])
+        val_set_dataset = GeneralDataset(np.array(val_set.dataset.data)[val_indices].tolist(), np.array(val_set.dataset.targets)[val_indices])
+        #print(train_set_dataset)
+        #print(train_set_dataset.targets)
+        #print(len(train_set), 'trainset length real')
+        #print(len(train_set_dataset), 'trainset length')
+        #print(len(val_set_dataset), 'valset length')
+        np.random.seed(args.random_seed)
+        classes_integer_list = [0,1, 2, 3, 4, 5, 6, 7, 8, 9]
+        np.random.shuffle(classes_integer_list) # shuffles classes to choose which are iid and ood
+        classes_idx_ID = classes_integer_list[0:args.ID_tasks]
+        #print(classes_idx_ID)
+        trainset_one_out, testset_one_out, valset_one_out = [], [], []
+
+        
+        # generate the id classes, then trainset and testset need to be a list of data loaders for each id class
+        #valset_copy2 = copy(val_set_dataset) # this only needs to be copied once as we do not care how it is mutated as we will not use it
+        for id_class in classes_idx_ID:
+
+
+            #print(id_class, 'id class')
+            # look into how to fix this
+            trainset_copy = copy(train_set_dataset)
+            #print(len(trainset_copy), 'dataset copy length')
+            testset_copy = copy(testset)
+            valset_copy = copy(val_set_dataset)
+
+
+
+
+            class_trainset, class_testset, class_valset = create_OOD_dataset(id_class, trainset_copy, testset_copy, valset_copy)# although this says ood, the functionality that we desire is achieved by
+            # this function. We simply want to get the training and testing points belonging to this specific id class which is achieved by this function
+            #print(len(class_trainset), 'class trainset length')
+            #print(class_trainset.data[0].shape, 'class trainset data shape')
+            #class_valset, _ = create_OOD_dataset(id_class, valset_copy, valset_copy2)
+            trainset_one_out.append(class_trainset)
+            testset_one_out.append(class_testset)
+            valset_one_out.append(class_valset)
     # combine_set = []
     # combine_set.append(val_set)
     # combine_set.append(ood_trainset)
     # combine_set = data.ConcatDataset(combine_set)
-
+    #print('second batch size check', BATCH_SIZE)
+    #print('type of trainset', type(train_set.dataset.data))
+    #print(type(train_set.dataset.data[0]))
+    if args.leave_one_out:
+        BATCH_SIZE = 1
     trainloader = data.DataLoader(train_set, batch_size = BATCH_SIZE, shuffle = True, num_workers = 2, drop_last = True)
     testloader  = data.DataLoader(testset, batch_size = BATCH_SIZE, shuffle = False, num_workers = 2)
     valloader   = data.DataLoader(val_set, batch_size = BATCH_SIZE, shuffle = False, num_workers = 2, drop_last = True)
@@ -259,9 +334,11 @@ def data_loader_MNIST(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
 
     print("Train set length", len(train_set))
     print("Val set length", len(val_set))
-    print("Test set length", len(testset))
+    print("Te\st set length", len(testset))
     print("OOD set length", ood_testset_len)
     #return trainloader, valloader, testloader, ood_trainloader, oodloader, classes
+    if args.leave_one_out:
+        return trainloader, valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset, trainset_one_out, testset_one_out, valset_one_out
     return trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset
 
 
@@ -353,14 +430,14 @@ def create_traintestset_audio(ood_class, trainset, testset):
     targets = list(accessed_targets)
     accessed_data = map(trainset.dataset.data[trainset.indices].__getitem__, idx)
     data = list(accessed_data)
-    trainset = AudioDataset(data, targets)
+    trainset = GeneralDataset(data, targets)
 
     idx = np.where(np.isin(np.array(testset.dataset.targets[testset.indices]), ood_class, invert = True))[0].tolist()
     accessed_targets = map(testset.dataset.targets[testset.indices].__getitem__, idx)
     test_targets = list(accessed_targets)
     accessed_data = map(testset.dataset.data[testset.indices].__getitem__, idx)
     test_data = list(accessed_data)
-    testset = AudioDataset(test_data, test_targets)
+    testset = GeneralDataset(test_data, test_targets)
     return trainset, testset
 
 def create_traintestset(ood_class, trainset, testset):
@@ -388,7 +465,7 @@ def create_OOD_dataset_audio(ood_class, ood_trainset, oodset):
     targets = list(accessed_targets)
     accessed_data = map(ood_trainset.dataset.data.__getitem__, idx_ood)
     data = list(accessed_data)
-    ood_trainset = AudioDataset(data, targets)
+    ood_trainset = GeneralDataset(data, targets)
 
 
 
@@ -398,12 +475,12 @@ def create_OOD_dataset_audio(ood_class, ood_trainset, oodset):
     targets = list(accessed_targets)
     accessed_data = map(oodset.dataset.data.__getitem__, idx_ood)
     data = list(accessed_data)
-    oodset = AudioDataset(data, targets)
+    oodset = GeneralDataset(data, targets)
 
 
     return ood_trainset, oodset
 
-def create_OOD_dataset(ood_class, ood_trainset, oodset):
+def create_OOD_dataset(ood_class, ood_trainset, oodset, valset = None):
 
 
     idx_ood = np.where(np.array(ood_trainset.targets) == ood_class)[0].tolist()
@@ -421,6 +498,13 @@ def create_OOD_dataset(ood_class, ood_trainset, oodset):
     accessed_data = map(oodset.data.__getitem__, idx_ood)
     oodset.data = list(accessed_data)
 
+    if valset:
+        idx_ood = np.where(np.array(valset.targets) == ood_class)[0].tolist()
+        accessed_targets = map(valset.targets.__getitem__, idx_ood)
+        valset.targets = list(accessed_targets)
+        accessed_data = map(valset.data.__getitem__, idx_ood)
+        valset.data = list(accessed_data)
+        return ood_trainset, oodset, valset
 
     return ood_trainset, oodset
 
@@ -465,7 +549,7 @@ def create_OOD_dataset_svhn(ood_class, ood_trainset, oodset):
     return ood_trainset, oodset
 
 def random_split_dataset(d, t):
-    dataset = AudioDataset(d, t)
+    dataset = GeneralDataset(d, t)
     length = len(dataset)
 
     train_len = int(length // (5/4))

@@ -3,8 +3,10 @@ import data_loader
 
 import pdb
 
+from arguments import get_args, print_args
 
 def single_dataset_loader(dataset, data_path, batch_size, ood_class_idx):
+    args = get_args()
     ## load dataset1
     if dataset == "cifar10":
         trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset = data_loader.data_loader_CIFAR_10(data_path, batch_size, ood_class_idx)
@@ -12,7 +14,10 @@ def single_dataset_loader(dataset, data_path, batch_size, ood_class_idx):
         trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset = data_loader.data_loader_FashionMNIST(data_path, batch_size, ood_class_idx)
         classes[0] = 'top'
     elif dataset == "mnist":
-        trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset = data_loader.data_loader_MNIST(data_path, batch_size, ood_class_idx)
+        if args.leave_one_out:
+             trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset, trainset_one_out, testset_one_out, valset_one_out = data_loader.data_loader_MNIST(data_path, args.batch_size, ood_class_idx)
+        else:
+            trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset = data_loader.data_loader_MNIST(data_path, batch_size, ood_class_idx)
     elif dataset == 'audiomnist':
         trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset = data_loader.data_loader_Audio_MNIST(data_path, batch_size, ood_class_idx)
     elif dataset =="svhn":
@@ -26,7 +31,8 @@ def single_dataset_loader(dataset, data_path, batch_size, ood_class_idx):
     else:
         print("Invalid dataset ")
         exit()
-
+    if args.leave_one_out:
+        return  trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset, trainset_one_out, testset_one_out, valset_one_out
     return trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset
 
 def mutliple_dataset_loader(data_path, dataset1, dataset2, batch_size):

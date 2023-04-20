@@ -8,7 +8,7 @@ model_results/
 
 #ignore all results
 results/
-SHELS-mainresults/
+../SHELS-mainresults/
 
 
 #ignore datasets 
@@ -21,8 +21,7 @@ __pycache__/
 
 processed_audio_dataset
 
-AudioMNIST/
-
+../AudioMNIST
 
 processed_audio_targets
 

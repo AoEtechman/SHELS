@@ -13,14 +13,21 @@ def build_tables():
 
     for dataset_folders in next(os.walk(root_dir))[1]:        #loop through data sets
         current_path = os.path.join(root_dir, dataset_folders)
+        print("dataset", current_path)
         # need to build a 2d grid . we will build one for each thing. turn into a numpy array
         # and add to the previos numpy array and then average across all random seeds
         # do this by building up a list and appending to a bigger list
         final_table_list = np.zeros((15, 2))
+        counter = 0
+        print('the random seed folders', next(os.walk(current_path))[1])
         for random_seed_folder in  next(os.walk(current_path))[1]:  #loop through all 10 random seeds
+            print(counter, 'counter should get up to 10')
+            counter += 1
             table_list = []
             current_path2 = os.path.join(current_path, random_seed_folder)
+            print("random seed folder", current_path2)
             for _, _, files in os.walk(current_path2):
+                print(len(files), " length of files, should be 5") 
                 for file in files:    # loop through each iteration of continual learning process
                     with open(os.path.join(current_path2, file), 'rb') as f:
                         state = pickle.load(f)
@@ -38,10 +45,13 @@ def build_tables():
                         print('original total accuracy', original_total_accuracy)
                         table_list.append([optimal_id_accuracy, original_id_accuracy])
                         table_list.append([optimal_ood_accuracy, original_ood_accuracy])
-                        table_list.append([optimal_total_accuracy, original_total_accuracy])                        
+                        table_list.append([optimal_total_accuracy, original_total_accuracy])     
+                               
             table_list = np.array(table_list)
-            final_table_list += table_list
-        final_table_list /= 10 # average on 10 random seeds
+            if table_list.shape != (0,):
+
+                final_table_list += table_list
+        final_table_list /= len(next(os.walk(current_path))[1]) # average on random seeds
         final_table_list = final_table_list.tolist()
         final_table_list = [[f'{elem}' for elem in row] for row in final_table_list]
         
@@ -59,7 +69,7 @@ def build_tables():
         #print(len(final_table_list[0]))
         #print(len(row_labels))
         #print(len(col_labels)) 
-        table = ax.table( cellText = final_table_list, rowLabels = row_labels, colLabels = col_labels, rowColours =["blue"] * 15, colColours =["blue"] * 2, colWidths=[.3, .3,.3], cellLoc ='right',  loc ='center right')         
+        table = ax.table( cellText = final_table_list, rowLabels = row_labels, colLabels = col_labels, rowColours =["green"] * 15, colColours =["blue"] * 2, colWidths=[.3, .3,.3], cellLoc ='right',  loc ='center right')         
    
         ax.set_title(state['dataset'], fontweight ="bold") 
         # fig = plt.figure()

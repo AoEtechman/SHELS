@@ -15,7 +15,7 @@ from scipy.special import softmax
 import pdb
 
 
-def compute_per_class_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist_classes, baseline_ood):
+def compute_per_class_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist_classes, baseline_ood, eta):
 
     if len(ood_class_idx) == 1:
         ind_classes =  classes.copy()
@@ -24,17 +24,24 @@ def compute_per_class_thresholds(activations_train, trainer, classes, ood_class_
          ind_classes = classes[0: in_dist_classes]
     weights = trainer.model.classifier[trainer.weight_idx].weight.detach().cpu().numpy()
     thresholds = np.zeros(in_dist_classes)
+    means = np.zeros(in_dist_classes)
+    stds = np.zeros(in_dist_classes)
 
     total_train_data = 0
     total_true_y = 0
+    #print(activations_train.keys(), 'keys')
     for class_idx in range(0,in_dist_classes):
         y_list = []
+        
         train_data = activations_train[str(class_idx)]
+        #print(train_data)
 
         total_train_data+=len(train_data)
         true_y = 0
         for idx in range(0,len(train_data)):
-
+            #print(idx)
+            #print(type(train_data))
+            #print(len(train_data))
             train_feats = train_data[idx,:]
             y_label = []
             y_weighted = []
@@ -59,7 +66,9 @@ def compute_per_class_thresholds(activations_train, trainer, classes, ood_class_
                 true_y +=1
 	
         #print("accuracy {}".format(ind_classes[class_idx]), 100*true_y/len(train_data))
-        thresholds[class_idx] = np.mean(y_list) - np.std(y_list)
+        thresholds[class_idx] = np.mean(y_list) - np.std(y_list) * eta
+        means[class_idx] = np.mean(y_list)
+        stds[class_idx] = np.std(y_list)
         print(np.mean(y_list), 'mean')
         print(np.std(y_list), 'std dev')
         print("threshold", thresholds[class_idx])
@@ -69,7 +78,7 @@ def compute_per_class_thresholds(activations_train, trainer, classes, ood_class_
     print("Computed thresholds using training data")
     print('real_thresholds')
     print("/n")
-    return thresholds
+    return thresholds, means, stds
 
 def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist_classes, baseline_ood, activations_list_new_class, original_thresholds):
     '''
@@ -86,14 +95,15 @@ def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist
 
     weights = trainer.model.classifier[trainer.weight_idx].weight.detach().cpu().numpy()
 
-    train_data_std_devs = [] # list of lists containing distance from mean of weighted feats of a class
 
+    train_data_std_devs = [] # list of lists containing distance from mean of weighted feats of a class
     ID_class_properties = {}  # store mean and std dev
     # get lists of std devs from mean
     #true_y = 0
     total_y = 0
     total_y_id = 0
     print('in_dist_classes', in_dist_classes)
+
     for class_idx in range(in_dist_classes):
 
         train_data = activations_train[str(class_idx)]  #get all the activations of ground truth class
@@ -108,7 +118,9 @@ def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist
             weighted_feats = [] # weighted feat projection of current data point and all of the classes
 
             for k in range(0, in_dist_classes): # loop through all potential classes
+
                 current_class_weights = weights[k, :]
+                
                 if baseline_ood:
                     norm = np.linalg.norm(train_feats) # normalize all of the features
                     norm = np.where(norm==0,1e-20,norm) # if norm is zero offset to small epsilon
@@ -126,7 +138,8 @@ def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist
             all_weighted_feats.append(weighted_feats[class_idx])    
 
         # find the best threshold for the current class
-
+        if len(correct_weighted_feats) == 0:
+            print('we do not have any weighted feats that were classified correctly')
         mean = np.mean(correct_weighted_feats)
         #mean = np.mean(all_weighted_feats)
         std_dev = np.std(correct_weighted_feats)
@@ -244,7 +257,7 @@ def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist
 
 
 
-def update_thresholds(thresholds,activations_list_new_class,trainer,in_dist_classes):
+def update_thresholds(thresholds,activations_list_new_class,trainer,in_dist_classes, eta = 1):
 
     weights = trainer.model.classifier[trainer.weight_idx].weight.detach().cpu().numpy()
 
@@ -266,7 +279,7 @@ def update_thresholds(thresholds,activations_list_new_class,trainer,in_dist_clas
             y_list.append(weighted_feats)
             true_y +=1
         # y_list.append(weighted_feats)
-    thresholds[class_idx-1] = np.mean(y_list) - np.std(y_list)
+    thresholds[class_idx-1] = np.mean(y_list) - eta * np.std(y_list)
 
     total_accuracy =  100*true_y/len(activations_list_new_class)
     # print("New class accuracy",total_accuracy)
@@ -275,20 +288,20 @@ def update_thresholds(thresholds,activations_list_new_class,trainer,in_dist_clas
     return thresholds
 
 
-def compute_test_Acc(testloader, thresholds, trainer, classes, ood_class_idx, save_path, in_dist_classes, in_dist_class_list, baseline_ood,save_k = 0):
+def compute_test_Acc(testloader, thresholds, trainer, classes, ood_class_idx, save_path, in_dist_classes, in_dist_class_list, baseline_ood,args, save_k = 0):
 
     _, _, activations,activations_test, _ = trainer.evaluate(testloader, ood_class_idx,in_dist_class_list, extract_act = True)
 
     if len(ood_class_idx) == 1:
-        np.savez(save_path+'/activations/act_full_test_{}.npz'.format(classes[ood_class_idx[0]]),**activations_test)
+        np.savez(save_path+'/activations/{}/act_full_test_{}.npz'.format(args.random_seed, classes[ood_class_idx[0]]),**activations_test)
     else:
-        np.savez(save_path+'/activations/act_full_test_{}.npz'.format(save_k),**activations_test)
+        np.savez(save_path+'/activations/{}/act_full_test_{}.npz'.format(args.random_seed, save_k),**activations_test)
 
 
     if len(ood_class_idx) == 1:
-        activations_test = dict(np.load(save_path+'/activations/act_full_test_{}.npz'.format(classes[ood_class_idx[0]]), allow_pickle = True))
+        activations_test = dict(np.load(save_path+'/activations/{}/act_full_test_{}.npz'.format(args.random_seed, classes[ood_class_idx[0]]), allow_pickle = True))
     else:
-        activations_test = dict(np.load(save_path+'/activations/act_full_test_{}.npz'.format(save_k),allow_pickle = True))
+        activations_test = dict(np.load(save_path+'/activations/{}/act_full_test_{}.npz'.format(args.random_seed, save_k),allow_pickle = True))
 
     weights = trainer.model.classifier[trainer.weight_idx].weight.detach().cpu().numpy()
     if len(ood_class_idx) == 1:
@@ -384,7 +397,7 @@ def compute_incremental_test_acc(testloader, thresholds, trainer, classes, ood_c
 
 
 
-def compute_ood_Acc(ood_data_list, thresholds, trainer, classes, ood_class_idx, save_path, in_dist_classes, multiple_dataset, in_dist_class_list, baseline_ood ,save_k = 0):
+def compute_ood_Acc(ood_data_list, thresholds, trainer, classes, ood_class_idx, save_path, in_dist_classes, multiple_dataset, in_dist_class_list, baseline_ood , args, save_k = 0):
     ood_acc_list = []
     #print(ood_data_list, 'ood_data_list')
     for i in range(0,len(ood_data_list)):
@@ -395,15 +408,15 @@ def compute_ood_Acc(ood_data_list, thresholds, trainer, classes, ood_class_idx, 
         loss, acc, act_avg_ood, activation_list_ood = trainer.ood_evaluate(ood_trainloader)
 
         if len(ood_class_idx) > 0:
-            np.savez(save_path+'/activations/act_full_ood_{}_{}.npz'.format(classes[ood_class_idx[i]],save_k),act_ood = activation_list_ood)
+            np.savez(save_path+'/activations/{}/act_full_ood_{}_{}.npz'.format(args.random_seed, classes[ood_class_idx[i]],save_k),act_ood = activation_list_ood)
         else:
-            np.savez(save_path+'/activations/act_full_ood_{}.npz'.format(save_k),act_ood = activation_list_ood)
+            np.savez(save_path+'/activations/{}/act_full_ood_{}.npz'.format(args.random_seed, save_k),act_ood = activation_list_ood)
 
 
         if len(ood_class_idx) > 0:
-            activations_ood = dict(np.load(save_path+'/activations/act_full_ood_{}_{}.npz'.format(classes[ood_class_idx[i]],save_k), allow_pickle = True))['act_ood']
+            activations_ood = dict(np.load(save_path+'/activations/{}/act_full_ood_{}_{}.npz'.format(args.random_seed, classes[ood_class_idx[i]],save_k), allow_pickle = True))['act_ood']
         else:
-            activations_ood = dict(np.load(save_path+'/activations/act_full_ood_{}.npz'.format(save_k), allow_pickle = True))['act_ood']
+            activations_ood = dict(np.load(save_path+'/activations/{}/act_full_ood_{}.npz'.format(args.random_seed, save_k), allow_pickle = True))['act_ood']
 
         weights = trainer.model.classifier[trainer.weight_idx].weight.detach().cpu().numpy()
         ood_data = activations_ood

@@ -1,18 +1,17 @@
 import torch
 import torch.nn as nn
 import numpy as np
-import time
-import pdb
-import data_loader
+import torch.utils.data as data
 from train import Trainer
 import random
+from custom_dataloader import GeneralDataset
+from copy import deepcopy
 
 from arguments import get_args, print_args
 import run_utils, data_utils
 import json
 import argparse
 import os
-import sys
 
 if __name__ == "__main__":
     load_args = False
@@ -35,11 +34,6 @@ if __name__ == "__main__":
         args = get_args()
         print_args(args)
 
-        #This is where I control the random seed for cifar experiment
-        #my_task_id = int(sys.argv[1])
-        #num_tasks = int(sys.argv[2])
-        #if args.dataset1 == 'cifar10':
-            #args.random_seed = my_task_id # random seed is simply task id which is 0 - 9
         if args.train:
             with open(args.save_path+'/args.txt', 'w') as f:
                 json.dump(args.__dict__, f, indent=2)
@@ -97,6 +91,7 @@ if __name__ == "__main__":
                 else:
                     list_idx = np.arange(0,args.total_tasks)
                     class_list = []
+
                 ood_acc_list = []
                 test_acc_list = []
                 for exp_no in range(0,10):
@@ -111,16 +106,97 @@ if __name__ == "__main__":
 
                     classes_idx_ID = list_idx[0:args.ID_tasks]
 
-                    trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset = data_utils.single_dataset_loader(args.dataset1, data_path, args.batch_size, classes_idx_OOD)
-                    trainer = Trainer(output_dim, device, args)
+
+                    if args.leave_one_out:
+                        #args.batch_size = 32 # set to 32 for training
+                        trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset, trainset_one_out, testset_one_out, valset_one_out = data_utils.single_dataset_loader(args.dataset1, data_path, args.batch_size, classes_idx_OOD)
+                    else:
+                        trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset = data_utils.single_dataset_loader(args.dataset1, data_path, args.batch_size, classes_idx_OOD)
+                    
+                    #trainer = Trainer(output_dim, device, args)
 
                     print(classes)
                     print("OOD Class :", np.array(classes)[classes_idx_OOD])
                     print("IND Class :", np.array(classes)[classes_idx_ID])
+                    
+                    if args.leave_one_out == True:
+                        #original_batch_size = args.batch_size
+                        #args.batch_size = 32 # set to 32 for training
+                        best_etas = []
+
+                        for i in range(args.ID_tasks):
+                            
+                            leave_one_out_trainer = Trainer(output_dim -  1, device, args)
+                            leave_out_class = i
+
+                            classes_idx_ID_one_out = list(classes_idx_ID[0:leave_out_class]) + list(classes_idx_ID[leave_out_class + 1:])
+                            # trainer,args, trainloader,valloader, testloader, classes_idx_OOD, classes,classes_idx_ID, idx
+                            
+                            train_set = GeneralDataset([], [])
+                            test_set = GeneralDataset([], [])
+                            val_set = GeneralDataset([], [])
+                            for j in range(args.ID_tasks):
+                                if j != i:
+                                    #print('type', type(train_set.data))
+                                    #print(len(train_set.data))
+                                    train_set.data += trainset_one_out[j].data
+                                    train_set.targets += trainset_one_out[j].targets
+                                    test_set.data += testset_one_out[j].data
+                                    test_set.targets += testset_one_out[j].targets
+                                    val_set.data += valset_one_out[j].data
+                                    val_set.targets += valset_one_out[j].targets
+                                    #print(len(train_set), 'length of trainset, should be growing')
+                            #print(args.batch_size, 'batch size')
+                            train_set.data = torch.stack((train_set.data)).unsqueeze(1).float()
+                            
+                            #print('train_set data shape', train_set.data.shape)
+                            test_set.data  = torch.stack((test_set.data)).unsqueeze(1).float()
+                            val_set.data = torch.stack((val_set.data)).unsqueeze(1).float()
+                            trainloader_one_out = data.DataLoader(train_set, batch_size = args.batch_size, shuffle = True, num_workers = 2, drop_last = True)
+                            testloader_one_out  = data.DataLoader(test_set, batch_size = args.batch_size, shuffle = False, num_workers = 2, drop_last = True)
+                            valloader_one_out   = data.DataLoader(val_set, batch_size = args.batch_size, shuffle = False, num_workers = 2, drop_last = True)
+                            
+
+
+
+
+                            trainloader_one_out_cheat = data.DataLoader(train_set, batch_size = 1, shuffle = True, num_workers = 2, drop_last = True) 
+                            #testloader_one_out_cheat  = data.DataLoader(test_set, batch_size = 1, shuffle = False, num_worke$     
+                            #valloader_one_out_cheat   = data.DataLoader(val_set, batch_size = 1, shuffle = False, num_worker$
+                            print('about to enter cross validation training')
+                            run_utils.run(leave_one_out_trainer, args, trainloader_one_out, valloader_one_out, testloader_one_out, [leave_out_class], classes, classes_idx_ID_one_out, exp_no, True )
+                            print('finished training')
+                            best_eta = run_utils.leave_one_out(trainloader_one_out_cheat, trainset_one_out[i], leave_one_out_trainer, classes, [i], args, classes_idx_ID_one_out, exp_no)
+                            best_etas.append(best_eta)
+
+                            
+
+
+                        print('best etas for leave out classes: ', best_etas)
+                        final_eta = np.mean(best_etas)
+                        print('final eta', final_eta)
+                        eta_save_path = args.save_path + '/leave_one_out_eta' + '/{}/eta.npz'.format(args.random_seed)
+                        print(eta_save_path)
+                        np.savez(eta_save_path,final_eta = final_eta, best_etas = best_etas)
+                    # also save the classes that were used for this random seed
+                        args.train = False
+
+                    #if not args.leave_one_out:
+                    trainer = Trainer(output_dim, device, args)
                     run_utils.run(trainer, args, trainloader, valloader, testloader,classes_idx_OOD, classes,classes_idx_ID,exp_no)
                     
                     if args.load_checkpoint:
-                        test_acc, ood_acc = run_utils.do_ood_eval(trainloader, valloader,testloader, testset, ood_trainset_list,ood_testset_list, trainer, classes,classes_idx_OOD,args,classes_idx_ID,exp_no)
+                        if args.leave_one_out:
+                            args.batch_size = 1
+                            results = np.load(args.save_path + '/leave_one_out_eta' + '/{}/eta.npz'.format(args.random_seed))
+                            final_eta = results['final_eta']
+                            best_etas = results['best_etas']
+                            eta = final_eta
+                        else:
+                            eta = 1
+
+                        test_acc, ood_acc = run_utils.do_ood_eval(trainloader, valloader,testloader, testset, ood_trainset_list,ood_testset_list, trainer, classes,classes_idx_OOD,args,classes_idx_ID, eta , exp_no)
+                        
                         print("TEST_Acc:", test_acc)
                         print("OOD_acc:", ood_acc)
                         ood_acc_list.append(ood_acc)

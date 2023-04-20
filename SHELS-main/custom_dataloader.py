@@ -47,7 +47,7 @@ class CustomDataset(Dataset):
 
 
 
-class AudioDataset(Dataset):
+class GeneralDataset(Dataset):
     def __init__(self, data, targets):
         self.data = data
         self.targets = targets
@@ -57,6 +57,8 @@ class AudioDataset(Dataset):
             return len(self.data)
         elif torch.is_tensor(self.data):
             return self.data.size(dim = 0)
+        elif isinstance(self.data, np.ndarray):
+            return self.data.shape[0]
 
     def __getitem__(self, idx):
         input_features = self.data[idx]

@@ -154,20 +154,28 @@ class Trainer:
             self.optimizer.zero_grad()
             layers , y_pred = self.model(x)
             #print(y_pred, 'y pred')
+            #print('targets', y)
+            #if len(ood_class) == 1:
+                #print('original y before change', y)
+                #y = torch.where(y>ood_class[0], y-1,y)
+                
 
-            if len(ood_class) == 1:
-                y = torch.where(y>ood_class[0], y-1,y)
-
-            elif len(ood_class) > 1:
-                y_new = y.clone()
+            #elif len(ood_class) > 1:
+                #y_new = y.clone()
                 #print('original y before change:', y_new)
                 #print('in dist classes', in_dist_classes)
-                for j in range(0,len(in_dist_classes)):
+                #for j in range(0,len(in_dist_classes)):
 
-                    y_new = torch.where(y == in_dist_classes[j], j, y_new)# if y is equall to in dist classes, make it equal to index, otherwise keep it the same as it was
-                y = y_new.clone()
-            
-            #print(y, 'actual y')      
+                    #y_new = torch.where(y == in_dist_classes[j], j, y_new)# if y is equall to in dist classes, make it equal to index, otherwise keep it the same as it was
+                #y = y_new.clone()
+            y_new = y.clone()
+            #print('original y before change:', y_new)
+            #print('in dist classes', in_dist_classes)
+            for j in range(0,len(in_dist_classes)):
+
+                y_new = torch.where(y == in_dist_classes[j], j, y_new)# if y is equall to in dist classes, make it equal to inde$
+            y = y_new.clone()
+            #print(y, 'y after change')      
             loss = self.criterion(y_pred,y)
 
             #print(loss, 'loss')
@@ -352,16 +360,19 @@ class Trainer:
 
                 layers ,y_pred = self.model(x)
 
-                if len(ood_class) == 1:
-                    y = torch.where(y>ood_class[0], y-1,y)
+                #if len(ood_class) == 1:
+                    #y = torch.where(y>ood_class[0], y-1,y)
 
 
-                elif len(ood_class) > 1:
-                    y_new = y.clone()
-                    for j in range(0,len(in_dist_classes)):
-                        y_new = torch.where(y == in_dist_classes[j], j, y_new)
-                    y = y_new.clone()
-
+                #elif len(ood_class) > 1:
+                    #y_new = y.clone()
+                    #for j in range(0,len(in_dist_classes)):
+                        #y_new = torch.where(y == in_dist_classes[j], j, y_new)
+                    #y = y_new.clone()
+                y_new = y.clone()
+                for j in range(0,len(in_dist_classes)):
+                    y_new = torch.where(y == in_dist_classes[j], j, y_new)
+                y = y_new.clone()
                 loss = self.criterion(y_pred, y)
                 acc = self.calculate_accuracy(y_pred, y)
                 epoch_loss += loss.item()
