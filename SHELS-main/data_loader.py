@@ -38,7 +38,7 @@ def data_loader_CIFAR_10(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
     if len(ood_class) > 0:
         #print(ood_class, 'ood_class')
         trainset, testset = create_traintestset(ood_class, trainset,testset)
-        if args.debugging:
+        if args.debugging: #This probably will not work with leave one out
             trainset = data.Subset(trainset, np.arange(0, 500))
             testset = data.Subset(testset, np.arange(0, 200))
         #print(torch.unique(torch.tensor(trainset.targets)), 'unique items in trainset')
@@ -60,25 +60,37 @@ def data_loader_CIFAR_10(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
     val_data_len = len(trainset) - train_data_len
      
     train_set, val_set = data.random_split(trainset,[train_data_len, val_data_len])
-    if args.leave_one_out == True:
+    
+    if args.leave_one_out:
+        train_indices = train_set.indices
+        val_indices = val_set.indices
+        print(type(train_set.dataset.data))
+      
+        train_set_dataset = GeneralDataset(np.array(train_set.dataset.data)[train_indices].tolist(), np.array(train_set.dataset.targets)[train_indices])
+        val_set_dataset = GeneralDataset(np.array(val_set.dataset.data)[val_indices].tolist(), np.array(val_set.dataset.targets)[val_indices])
+
         np.random.seed(args.random_seed)
-        np.random.shuffle(classes) # shuffles classes to choose which are iid and ood
-        classes_idx_ID = classes[0:args.ID_tasks]
-        trainset_one_out, testset_one_out = [], []
+        classes_integer_list = [0,1, 2, 3, 4, 5, 6, 7, 8, 9]
+        np.random.shuffle(classes_integer_list) # shuffles classes to choose which are iid and ood
+        classes_idx_ID = classes_integer_list[0:args.ID_tasks]
+        #print(classes_idx_ID)
+        trainset_one_out, testset_one_out, valset_one_out = [], [], []
+
+        
         # generate the id classes, then trainset and testset need to be a list of data loaders for each id class
+        #valset_copy2 = copy(val_set_dataset) # this only needs to be copied once as we do not care how it is mutated as we will not use it
         for id_class in classes_idx_ID:
-            trainset_copy = train_set.clone()
-            testset_copy = testset.clone()
-            class_trainset, class_testset = create_OOD_dataset(id_class, trainset_copy, testset_copy)# although this says ood, the functionality that we desire is achieved by
-            # this function. We simply want to get the training and testing points belonging to this specific id class which is achieved by this function
+            trainset_copy = copy(train_set_dataset)
+            testset_copy = copy(testset)
+            valset_copy = copy(val_set_dataset)
+
+            class_trainset, class_testset, class_valset = create_OOD_dataset(id_class, trainset_copy, testset_copy, valset_copy)# although this says ood, the functionality that we desire is achieved by
             trainset_one_out.append(class_trainset)
             testset_one_out.append(class_testset)
-    # combine_set = []
-    # combine_set.append(val_set)
-    # combine_set.append(ood_trainset)
-    # combine_set = data.ConcatDataset(combine_set)
-    #train_set = trainset
-    #print(torch.unique(torch.tensor(train_set.targets)), 'unique values in final thing passes into trainloader')
+            valset_one_out.append(class_valset)
+
+    if args.leave_one_out:
+        BATCH_SIZE = 1
     trainloader = data.DataLoader(train_set, batch_size = BATCH_SIZE, shuffle = True, num_workers = 2, drop_last = True)
     testloader  = data.DataLoader(testset, batch_size = BATCH_SIZE, shuffle = False, num_workers = 2)
     valloader   = data.DataLoader(val_set, batch_size = BATCH_SIZE, shuffle = False, num_workers = 2, drop_last = True)
@@ -90,8 +102,9 @@ def data_loader_CIFAR_10(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
     print("Test set length", len(testset))
     print("OOD set length", ood_testset_len)
     #return trainloader, valloader, testloader, ood_trainloader, oodloader, classes
+    
     if args.leave_one_out:
-        return trainloader, valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset, trainset_one_out, testset_one_out
+        return trainloader, valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset, trainset_one_out, testset_one_out, valset_one_out
     return trainloader,valloader, testloader, ood_trainset_list, ood_testset_list, classes, testset
 
 
@@ -334,7 +347,7 @@ def data_loader_MNIST(root_dir = './data', BATCH_SIZE = 1, ood_class = [7]):
 
     print("Train set length", len(train_set))
     print("Val set length", len(val_set))
-    print("Te\st set length", len(testset))
+    print("Test set length", len(testset))
     print("OOD set length", ood_testset_len)
     #return trainloader, valloader, testloader, ood_trainloader, oodloader, classes
     if args.leave_one_out:

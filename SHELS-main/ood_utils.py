@@ -16,7 +16,6 @@ import pdb
 
 
 def compute_per_class_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist_classes, baseline_ood, eta):
-
     if len(ood_class_idx) == 1:
         ind_classes =  classes.copy()
         ind_classes.remove(classes[ood_class_idx[0]])
@@ -29,12 +28,10 @@ def compute_per_class_thresholds(activations_train, trainer, classes, ood_class_
 
     total_train_data = 0
     total_true_y = 0
-    #print(activations_train.keys(), 'keys')
     for class_idx in range(0,in_dist_classes):
         y_list = []
         
         train_data = activations_train[str(class_idx)]
-        #print(train_data)
 
         total_train_data+=len(train_data)
         true_y = 0
@@ -78,6 +75,9 @@ def compute_per_class_thresholds(activations_train, trainer, classes, ood_class_
     print("Computed thresholds using training data")
     print('real_thresholds')
     print("/n")
+    for i in range(len(thresholds)):
+        if np.isnan(thresholds[i]):
+            thresholds[i] = 0
     return thresholds, means, stds
 
 def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist_classes, baseline_ood, activations_list_new_class, original_thresholds):
@@ -138,11 +138,13 @@ def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist
             all_weighted_feats.append(weighted_feats[class_idx])    
 
         # find the best threshold for the current class
-        if len(correct_weighted_feats) == 0:
-            print('we do not have any weighted feats that were classified correctly')
         mean = np.mean(correct_weighted_feats)
         #mean = np.mean(all_weighted_feats)
         std_dev = np.std(correct_weighted_feats)
+        if len(correct_weighted_feats) == 0:
+            print('we do not have any weighted feats that were classified correctly')
+            mean = 0
+            std_dev = 0
         #std_dev = np.std(all_weighted_feats)
         ID_class_properties[class_idx] = (mean, std_dev) # store properties
         std_devs_from_mean = [ (mean - weighted_feat)/std_dev for weighted_feat in correct_weighted_feats] # build list of how far away each correctly classified point is from the mean
@@ -234,14 +236,19 @@ def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist
         ood_accuracies.append(100 * (true_y_ood)/total_y_ood)
         
         
-        accuracy = 100*(true_y)/total_y
+        #accuracy = 100*(true_y)/total_y     we are testing just doing the sum of them lets see what happens
+        totalaccuracy = 100*(true_y)/total_y #new change that we made
+        #accuracy = id_accuracy + 100 * (true_y_ood)/total_y_ood * 1.1
+        gmean = (id_accuracy * (100*true_y_ood/total_y_ood))**(1/2)
         if not have_computed_accuracy_original:
             have_computed_accuracy_original = True
             accuracy_original = 100 * true_y_original / total_y
-        accuracies.append(accuracy)
+        #accuracies.append(accuracy) The original thing we had
+        accuracies.append(totalaccuracy) #new change that we made
         #accuracies_original.append(accuracy_original)
-        if accuracy > best_accuracy:
-            best_accuracy = accuracy
+        if gmean > best_accuracy:
+            best_accuracy = gmean 
+            best_total_accuracy = totalaccuracy #new change that we made, note we also changed the return statement
             best_id_accuracy = id_accuracy
             best_ood_accuracy = true_y_ood / total_y_ood * 100
             best_thresholds = [thresholds]
@@ -252,7 +259,7 @@ def cheat_thresholds(activations_train, trainer, classes, ood_class_idx, in_dist
     print('best eta', best_eta)
     #print(eta, 'etas')
     #print(accuracies, 'accuracies')
-    return best_thresholds[0], best_accuracy, best_id_accuracy, best_ood_accuracy, accuracies, eta, best_eta, id_accuracies, ood_accuracies, id_accuracies_original, ood_accuracies_original, accuracy_original
+    return best_thresholds[0], best_total_accuracy, best_id_accuracy, best_ood_accuracy, accuracies, eta, best_eta, id_accuracies, ood_accuracies, id_accuracies_original, ood_accuracies_original, accuracy_original
 
 
 

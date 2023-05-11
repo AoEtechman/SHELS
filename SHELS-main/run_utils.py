@@ -88,7 +88,6 @@ def do_ood_eval(trainloader,valloader, testloader,testset, ood_trainset_list,ood
     ## 1. use traindata to compute thresholds for each class
 
     _, _, _,activations_list_train, _ = trainer.evaluate(trainloader, classes_idx_OOD, classes_idx_ID, extract_act = True)
-
     if len(classes_idx_OOD) == 1:
         np.savez(args.save_path + '/activations' + f'/{args.random_seed}' + '/act_full_train_{}.npz'.format(classes[classes_idx_OOD[0]]),**activations_list_train)
     else:
@@ -102,10 +101,10 @@ def do_ood_eval(trainloader,valloader, testloader,testset, ood_trainset_list,ood
     new_activations_list_train = activations_list_train.copy()
    ## compute class wise thresholds
     if args.leave_one_out:
-        thresholds_one_out, _, _ = ood_utils.compute_per_class_thresholds(activations_list_train, trainer, classes,classes_idx_OOD, args.ID_tasks, args.baseline_ood, eta)
+        thresholds_one_out, _, _ = ood_utils.compute_per_class_thresholds(new_activations_list_train, trainer, classes,classes_idx_OOD, args.ID_tasks, args.baseline_ood, eta)
         print(thresholds_one_out, 'leave one out thresholds')
 
-    thresholds, _, _ = ood_utils.compute_per_class_thresholds(activations_list_train, trainer, classes,classes_idx_OOD, args.ID_tasks, args.baseline_ood, 1)
+    thresholds, _, _ = ood_utils.compute_per_class_thresholds(new_activations_list_train, trainer, classes,classes_idx_OOD, args.ID_tasks, args.baseline_ood, 1)
    # cheat_thresholds = ood_utils.cheat_thresholds(activations_list_train, trainer, classes, classes_idx_OOD, args.ID_tasks, args.baseline_ood)
     print(thresholds,'original thresholds')
 
@@ -161,9 +160,8 @@ def do_ood_eval(trainloader,valloader, testloader,testset, ood_trainset_list,ood
                 ood_trainloader = data.DataLoader(curr_ood_data, batch_size = 1, shuffle = False, num_workers = 2)
 
                 _, _, _, activations_list_new_class_cheat = trainer.ood_evaluate(ood_trainloader)
-
-                # This has to be changed to just looking at the eta that best seperated the ood class from the id classes
                 cheat_threshold, best_accuracy, best_id_accuracy, best_ood_accuracy, accuracies, etas, best_eta, id_accuracies, ood_accuracies, id_accuracy_original, ood_accuracy_original, total_accuracy_original = ood_utils.cheat_thresholds(new_activations_list_train, trainer, classes,classes_idx_OOD, id_classes + k, args.baseline_ood, activations_list_new_class_cheat, thresholds)
+                print('cheat thresholds', cheat_threshold)
 
                 length_curr_ood_data = len(curr_ood_data)
                 print(length_curr_ood_data, 'length of ood data')
@@ -227,13 +225,16 @@ def do_ood_eval(trainloader,valloader, testloader,testset, ood_trainset_list,ood
 
                 # get the new eta, try with weighted avgeraging based on number of classes that are id and ood.
                 _, _, _, activations_list_new_class = trainer.ood_evaluate(ood_trainloader)
+                new_activations_list_train[str(id_classes +k)] = np.array(activations_list_new_class)
                 if args.leave_one_out:
                     id_class_weight = (id_classes + k)/(id_classes + k + 1)
                     ood_class_weight = 1/ (id_classes + k + 1)
-                    eta = eta * id_class_weight + best_eta * ood_class_weight
-                    thresholds_one_out = ood_utils.update_thresholds(thresholds_one_out, activations_list_new_class,trainer,classes_idx_ID, eta)
-                
+                    #eta = eta * id_class_weight + best_eta * ood_class_weight
+                    eta = .5 * eta + .5 * best_eta
+                    #thresholds_one_out = ood_utils.update_thresholds(thresholds_one_out, activations_list_new_class,trainer,classes_idx_ID, eta)
+                    thresholds_one_out, _, _ = ood_utils.compute_per_class_thresholds(new_activations_list_train, trainer, classes, classes_idx_OOD[k:], id_classes + k + 1, args.baseline_ood, eta)
                 thresholds = ood_utils.update_thresholds(thresholds, activations_list_new_class,trainer,classes_idx_ID)
+                print('thresholds one out', thresholds_one_out)
 
                
                 
@@ -247,7 +248,7 @@ def do_ood_eval(trainloader,valloader, testloader,testset, ood_trainset_list,ood
                 with open(  os.path.join(dir,  f'number_of_id_classes:{id_classes + k}.pickle'), 'wb') as f:
                     pickle.dump(state_dict, f, protocol=pickle.HIGHEST_PROTOCOL)
                 if args.leave_one_out:
-                    one_out_filename =  '/results/' +  args.dataset1 +  "/leave_one_out/" + str(args.random_seed)
+                    one_out_filename =  '/results/'  +  "leave_one_out/" +  args.dataset1 + '/' + str(args.random_seed)
                     one_out_dir = cwd+ one_out_filename
                     os.makedirs(one_out_dir, exist_ok = True)
                     with open(  os.path.join(one_out_dir,  f'number_of_id_classes:{id_classes + k}.pickle'), 'wb') as f:
@@ -276,7 +277,6 @@ def do_ood_eval(trainloader,valloader, testloader,testset, ood_trainset_list,ood
                 #     ax.set(xlabel='eta', ylabel='accuracy')
                 # #plt.savefig(f'accuracy_curves{k}.png')
                 # print(cheat_threshold)
-                new_activations_list_train[str(id_classes +k)] = activations_list_new_class
                 new_avg = current_act_avg_layers
                 #
                 for i in range(len(new_avg)-1):
