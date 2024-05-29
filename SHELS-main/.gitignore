@@ -11,6 +11,11 @@ results/
 ../SHELS-mainresults/
 
 
+#ignore submit file
+submit.sh 
+submitbatch.sh
+submitbatch2.sh
+
 #ignore datasets 
 datasets/
 data/
