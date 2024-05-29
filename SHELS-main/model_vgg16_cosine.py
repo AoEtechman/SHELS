@@ -155,3 +155,7 @@ class CIFAR10(nn.Module):
         self.classifier[4].to('cuda:0')
 
 
+
+
+
+

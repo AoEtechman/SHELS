@@ -3,10 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-#things to keep in mind
-# typical audio data is represented by 1d arrays instead of 2d arrays like images. this means that you will generally
-#want to use conv1d instead of 2D
-# need to figure this out
 class AUDIO_MNIST(nn.Module):
     def __init__(self, output_dim = 9, cosine_sim = True, baseline = False):
         super().__init__()

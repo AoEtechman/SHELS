@@ -25,22 +25,10 @@ def preprocess_data(src_path, meta_data_path):
     
     metaData = json.load(open(meta_data_path))
     Data = []
-    targets = []
- #   print(src_path)    
+    targets = []   
     for root, dirs, files in os.walk(src_path):
         counter = 0
-        # print(files)
-        # print(len(files))
-        # if len(files) > 0:
-        #     indexes = list(np.random.randint(len(files), size = 3))
-        # else:
-        #     indexes = []
         for filepath in files:
-        # for idx in indexes:
-        
-            # if counter < 3:
-            #     counter += 1
-#            print('filepath', filepath)
             digit, person, repition = filepath.rstrip(".wav").split("/")[-1].split("_")
             # digit, person, repition = files[idx].rstrip(".wav").split("/")[-1].split("_")
             fs, data = wavf.read(os.path.join(root , filepath))
